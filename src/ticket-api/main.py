@@ -1,39 +1,56 @@
 import os
+import psycopg2
 from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import create_engine, Column, String, Integer
-from sqlalchemy.orm import declarative_base, sessionmaker
 import uvicorn
 
-# Configuración de variables de entorno (ideal para Docker/RDS)
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://usuario:password@rds-endpoint.amazonaws.com:5432/nombre_db"
-)
+app = FastAPI()
 
-# Configuración de SQLAlchemy
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
+# Lectura estricta de variables de ambiente
+DB_HOST = os.getenv("DB_HOST")
+DB_PORT = os.getenv("DB_PORT", "5432")
+DB_NAME = os.getenv("DB_NAME")
+DB_USER = os.getenv("DB_USER")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
 
 
-# Modelo de Base de Datos
-class ReservationModel(Base):
-    __tablename__ = "reservations"
-
-    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    concert_id = Column(String(100), nullable=False)
-    user_id = Column(String(100), nullable=False)
-    ticket_type = Column(String(50), nullable=False)
-    quantity = Column(Integer, nullable=False)
-    status = Column(String(50), default="confirmed")
+def get_db_connection():
+    return psycopg2.connect(
+        host=DB_HOST,
+        port=DB_PORT,
+        dbname=DB_NAME,
+        user=DB_USER,
+        password=DB_PASSWORD
+    )
 
 
-# Crear tablas si no existen
-Base.metadata.create_all(bind=engine)
+def init_db():
+    """Crea la tabla reservations si no existe"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS reservations (
+                id SERIAL PRIMARY KEY,
+                concert_id VARCHAR(100) NOT NULL,
+                user_id VARCHAR(100) NOT NULL,
+                ticket_type VARCHAR(50) NOT NULL,
+                quantity INT NOT NULL,
+                status VARCHAR(50) DEFAULT 'confirmed'
+            );
+        """)
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"Error al inicializar la base de datos: {e}")
 
 
-# Schema de Pydantic para validar la entrada JSON
+@app.on_event("startup")
+def startup_event():
+    init_db()
+
+
 class ReserveRequest(BaseModel):
     concert_id: str
     user_id: str
@@ -41,39 +58,29 @@ class ReserveRequest(BaseModel):
     quantity: int
 
 
-app = FastAPI(title="Ticket API")
-
-
 @app.post("/reserve", status_code=status.HTTP_201_CREATED)
-async def reserve_ticket(payload: ReserveRequest):
-    db = SessionLocal()
+async def reserve(data: ReserveRequest):
     try:
-        new_reservation = ReservationModel(
-            concert_id=payload.concert_id,
-            user_id=payload.user_id,
-            ticket_type=payload.ticket_type,
-            quantity=payload.quantity,
-            status="confirmed"
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            """INSERT INTO reservations (concert_id, user_id, ticket_type, quantity, status) 
+               VALUES (%s, %s, %s, %s, 'confirmed') RETURNING id;""",
+            (data.concert_id, data.user_id, data.ticket_type, data.quantity)
         )
-        db.add(new_reservation)
-        db.commit()
-        db.refresh(new_reservation)
+        res_id = cur.fetchone()[0]
+        conn.commit()
+        cur.close()
+        conn.close()
 
         return {
             "status": "success",
-            "message": "Reservación confirmada y registrada en RDS",
-            "reservation_id": new_reservation.id,
-            "reservation": payload.model_dump()
+            "reservation_id": res_id,
+            "message": "Reservación guardada con estado confirmed"
         }
     except Exception as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al escribir en la base de datos: {str(e)}"
-        )
-    finally:
-        db.close()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-if __name__ == '__main__':
-    uvicorn.run("main:app", host="0.0.0.0", port=8080, reload=True)
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="0.0.0.0", port=8080)
