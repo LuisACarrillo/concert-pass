@@ -18,7 +18,7 @@ check_api() {
 # reserve <concert_id> <user_id> <ticket_type> <quantity>  -> imprime reservation_id o regresa 1
 reserve() {
     local body
-    body=$(curl -sS --max-time 15 -X POST "$BASE_URL/reserve" \
+    body=$(curl -sS --max-time 30 -X POST "$BASE_URL/reserve" \
         -H "Content-Type: application/json" \
         -d "{\"concert_id\":\"$1\",\"user_id\":\"$2\",\"ticket_type\":\"$3\",\"quantity\":$4}" \
         -w '\n%{http_code}') || return 1
@@ -26,9 +26,11 @@ reserve() {
     json_field reservation_id "$(head -n1 <<<"$body")"
 }
 
-# get_status <reservation_id> -> imprime el status actual
+# get_status <reservation_id> -> imprime el status actual, o "sin_respuesta" si la API no contestó
 get_status() {
-    json_field status "$(curl -sS --max-time 10 "$BASE_URL/reservation/$1")"
+    local st
+    st=$(json_field status "$(curl -s --max-time 10 "$BASE_URL/reservation/$1" 2>/dev/null)")
+    echo "${st:-sin_respuesta}"
 }
 
 is_final() { [ "$1" = "confirmed" ] || [ "$1" = "rejected" ]; }

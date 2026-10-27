@@ -36,8 +36,11 @@ t0=$SECONDS
 seq 1 "$TOTAL" | xargs -P "$CONCURRENCY" -I{} bash -c 'post_one {}'
 sent=$(wc -l <"$WORK/reservations.txt")
 log "POST /reserve aceptados: $sent/$TOTAL en $(( SECONDS - t0 ))s"
-if [ -s "$WORK/errors.txt" ]; then
-    echo "    Errores:"; sort "$WORK/errors.txt" | uniq -c | sed 's/^/    /'
+lost=$(( TOTAL - sent ))
+if [ "$lost" -gt 0 ]; then
+    echo "    $lost POST sin respuesta 202:"
+    sed -E 's/after [0-9]+ milliseconds/after N ms/' "$WORK/errors.txt" | sort | uniq -c | sed 's/^/    /'
+    echo "    Un POST que expira en el cliente pudo guardarse en RDS: compara con ./scripts/show-rds.sh"
 fi
 [ "$sent" -gt 0 ] || die "Ninguna reservación fue aceptada"
 
@@ -51,7 +54,8 @@ start=$SECONDS
 while :; do
     xargs -P "$CONCURRENCY" -L1 bash -c 'check_one "$0" "$1"' <"$WORK/reservations.txt" >"$WORK/status.txt"
     pending=$(awk '$3 != "confirmed" && $3 != "rejected"' "$WORK/status.txt" | wc -l)
-    echo "    $(( SECONDS - start ))s: $pending sin estado final"
+    no_answer=$(awk '$3 == "sin_respuesta"' "$WORK/status.txt" | wc -l)
+    echo "    $(( SECONDS - start ))s: $pending sin estado final ($no_answer GET sin respuesta)"
     [ "$pending" -eq 0 ] && break
     [ $(( SECONDS - start )) -ge "$POLL_TIMEOUT_SECONDS" ] && break
     sleep 2
@@ -59,8 +63,8 @@ done
 
 echo
 echo "=== Conteo por status ($CONCERT_ID/$TICKET_TYPE) ==="
-awk '{n[$3]++; q[$3]+=$2} END {printf "  %-10s %14s %8s\n", "STATUS", "RESERVACIONES", "BOLETOS";
-     for (s in n) printf "  %-10s %14d %8d\n", s, n[s], q[s]}' "$WORK/status.txt" | sort
+printf '  %-14s %14s %8s\n' STATUS RESERVACIONES BOLETOS
+awk '{n[$3]++; q[$3]+=$2} END {for (s in n) printf "  %-14s %14d %8d\n", s, n[s], q[s]}' "$WORK/status.txt" | sort
 sold=$(awk '$3 == "booked" || $3 == "confirmed" {s += $2} END {print s + 0}' "$WORK/status.txt")
 requested=$(awk '{s += $2} END {print s + 0}' "$WORK/status.txt")
 echo
@@ -73,7 +77,14 @@ if [ "$sold" -gt "$CAPACITY" ]; then
     exit 1
 fi
 if [ "$pending" -gt 0 ]; then
-    log "INCOMPLETO: $pending reservaciones sin estado final tras ${POLL_TIMEOUT_SECONDS}s (¿worker arriba?)"
+    if [ "$no_answer" -gt 0 ]; then
+        log "INCOMPLETO: ticket-api no respondió $no_answer GET; revisa docker compose logs ticket-api y show-rds.sh"
+    else
+        log "INCOMPLETO: $pending reservaciones siguen pending tras ${POLL_TIMEOUT_SECONDS}s (¿worker arriba?)"
+    fi
     exit 2
 fi
 log "OK: sin sobreventa ($sold <= $CAPACITY)"
+if [ "$lost" -gt 0 ]; then
+    echo "    Ojo: $lost POST sin respuesta no entran en este conteo; la cifra definitiva está en show-rds.sh"
+fi
