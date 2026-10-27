@@ -1,7 +1,7 @@
 # concert-pass
 
 # ticket-api
-docker build -f src/ticket-api/Dockerfile -t ticket-api .
+docker build -t ticket-api ticket-api/
 
 ### 2. Ejecutar el contenedor pasando las variables de entorno de tu RDS
 docker run -d -p 8080:8080 -e DB_HOST=TUNO_HOST_RDS -e DB_PORT=5432 -e DB_NAME=ticketdb -e DB_USER=postgres -e DB_PASSWORD='TuPasswordSeguro123!' --name ticket-api-container ticket-api

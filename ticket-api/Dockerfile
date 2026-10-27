@@ -1,3 +1,4 @@
+# Build context: ticket-api/
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -5,7 +6,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY src/ticket-api/ .
+COPY src/ .
 
 EXPOSE 8080
 
