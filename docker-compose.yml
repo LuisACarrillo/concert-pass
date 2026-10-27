@@ -40,7 +40,7 @@ services:
       - AWS_SECRET_ACCESS_KEY
       - AWS_SESSION_TOKEN
       - AWS_PROFILE
-      - CHECKOUT_URL=http://ticket-checkout:8000/checkout
+      - CHECKOUT_URL=http://ticket-checkout:8000
     depends_on:
       - ticket-checkout
     restart: unless-stopped

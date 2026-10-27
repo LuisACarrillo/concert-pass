@@ -44,7 +44,7 @@ Los contenedores usan tus credenciales de AWS montando `~/.aws` (solo lectura) o
 |---|---|---|
 | ticket-api | 8080 | `POST /reserve`, `GET /reservation/{id}`, `GET /health` |
 | ticket-checkout | 8000 | `POST /checkout`, `GET /health` |
-| ticket-worker | — | Consume SQS; sin HTTP |
+| ticket-worker | 8081 (interno) | Consume SQS; `GET /health` para probes |
 
 Flujo de estados: `pending` → `booked` → `confirmed`, o `pending` → `rejected` si no hay cupo.
 
@@ -57,8 +57,10 @@ curl "http://localhost:8080/reservation/<reservation_id>"
 
 ### Disponibilidad sin sobreventa
 
-ticket-worker usa la transacción de la sección 1.6 con dos ajustes necesarios en PostgreSQL:
+ticket-worker usa la transacción de la sección 1.6 con ajustes necesarios en PostgreSQL:
 
-1. `FOR UPDATE` no se permite con `SUM(...)`, así que el bloqueo va en una subconsulta y la suma afuera.
-2. Se bloquean todas las filas del concierto y tipo (no solo `booked`/`confirmed`) y en orden de `reservation_id`.
-   Filtrar por status permitió sobreventa en pruebas concurrentes, y sin orden fijo aparecían deadlocks entre workers.
+1. `FOR UPDATE` no se permite con `SUM(...)`: se bloquean las filas y la suma se calcula en el worker.
+2. Se bloquean todas las filas del concierto y tipo, no solo `booked`/`confirmed`. Como ticket-api inserta la fila
+   `pending` antes de encolar, siempre existe al menos la propia fila y todos los workers que compiten por la misma
+   sección bloquean el mismo conjunto. Filtrar por status permitió sobreventa en pruebas concurrentes.
+3. Se bloquea en orden de `reservation_id`; sin orden fijo aparecían deadlocks entre workers.
