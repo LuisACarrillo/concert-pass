@@ -25,7 +25,7 @@ def require_env(name):
 
 
 DB_HOST = require_env("DB_HOST")
-DB_PORT = os.getenv("DB_PORT", "5432")
+DB_PORT = require_env("DB_PORT")
 DB_NAME = require_env("DB_NAME")
 DB_USER = require_env("DB_USER")
 DB_PASSWORD = require_env("DB_PASSWORD")
