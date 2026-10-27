@@ -1,6 +1,8 @@
 # ticket-checkout: simula un procesador de pagos externo (Stripe, PayPal).
 # Autoriza siempre la compra con 200 OK; ticket-worker confirma la reservación al recibirlo.
 import logging
+import os
+import time
 import uuid
 
 from fastapi import FastAPI
@@ -8,6 +10,9 @@ from pydantic import BaseModel, Field
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("ticket-checkout")
+
+# Latencia simulada del procesador de pagos (opcional)
+CHECKOUT_DELAY_MS = int(os.getenv("CHECKOUT_DELAY_MS", "0"))
 
 app = FastAPI(title="ticket-checkout")
 
@@ -19,6 +24,8 @@ class CheckoutRequest(BaseModel):
 
 @app.post("/checkout")
 def checkout(req: CheckoutRequest):
+    if CHECKOUT_DELAY_MS > 0:
+        time.sleep(CHECKOUT_DELAY_MS / 1000)
     log.info("Pago autorizado: reservation_id=%s quantity=%d", req.reservation_id, req.quantity)
     return {"status": "authorized", "reservation_id": str(req.reservation_id), "quantity": req.quantity}
 
