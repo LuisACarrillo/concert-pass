@@ -149,6 +149,21 @@ ticket-worker usa la transacción de la sección 1.6 con tres ajustes que Postgr
 2. **Se bloquean todas las filas del concierto y tipo, no solo `booked`/`confirmed`.** ticket-api inserta la fila `pending` antes de encolar, así que siempre existe al menos la propia fila, y todos los workers que compiten por la misma sección bloquean el mismo conjunto. Filtrar por status permitió sobreventa en pruebas concurrentes.
 3. **Se bloquea en orden de `reservation_id`.** Sin un orden fijo aparecían deadlocks entre workers.
 
+## Resultados (docker compose local contra AWS real)
+
+`test-alta-demanda.sh`: 40 reservaciones concurrentes (20 en paralelo) a `bad-bunny-gdl/vip` con capacidad 10 y quantity de 1 o 2. Antes de cada corrida se vació `reservations` con `reset-db.sh`.
+
+| Workers | POST aceptados | Tiempo hasta estado final | confirmed | rejected | Vendidos en RDS | Decisiones por worker | Resultado |
+|---|---|---|---|---|---|---|---|
+| 1 | 40/40 en 2 s | ~49 s | 7 (10 boletos) | 33 (50 boletos) | 10 / 10 | 40 | Sin sobreventa |
+| 3 | 40/40 en 2 s | ~49 s | 7 (10 boletos) | 33 (50 boletos) | 10 / 10 | 10 / 10 / 20 | Sin sobreventa |
+
+### Por qué tarda lo mismo con 1 y con 3 workers
+
+- **SQS FIFO serializa por `MessageGroupId`.** Las 40 reservaciones son del mismo concierto, así que todas van en el grupo `bad-bunny-gdl`. Mientras un worker tiene mensajes de ese grupo en proceso, SQS no entrega más mensajes del mismo grupo a nadie. Los 3 workers se turnan el grupo (10/10/20 decisiones) pero nunca lo procesan en paralelo. Con varios conciertos a la vez, cada grupo sí avanzaría en paralelo y más workers aumentarían el throughput.
+- **`FOR UPDATE` sigue siendo necesario.** La serialización del grupo no evita que dos workers lean la misma disponibilidad: un mensaje reentregado por visibility timeout, o reservaciones de la misma sección en otro grupo, pueden competir. En pruebas concurrentes contra PostgreSQL local, bloquear solo las filas `booked`/`confirmed` produjo 12 boletos vendidos de 10. Con el bloqueo de toda la sección nunca hubo sobreventa.
+- **El cuello de botella es la lógica de inventario, no la recepción.** ticket-api aceptó las 40 en 2 s, mientras que el worker procesa unos 0.8 mensajes por segundo. Cada mensaje hace 6 o 7 viajes de ida y vuelta a RDS (leer, bloquear, actualizar, confirmar), y desde WSL a `us-east-1` cada viaje cuesta unos 150-200 ms. En EKS, dentro de la misma región, la latencia a RDS es mucho menor y el throughput por grupo debería subir.
+
 ## Pendiente para la parte 3
 
 - [ ] **EKS**: cluster con `eksctl` y 2 nodos de trabajo. Verificar con `kubectl get nodes`. Los nodos necesitan permisos sobre SQS (send/receive/delete), DynamoDB (`GetItem`) y, si se lee el secret desde el cluster, Secrets Manager. En AWS Academy se usa `LabRole`.
