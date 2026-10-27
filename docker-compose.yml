@@ -1,0 +1,46 @@
+# Corre los 3 servicios localmente contra la infraestructura real de AWS.
+# Requiere el .env que genera scripts/setup.sh.
+#   docker compose up --build
+#
+# Credenciales de AWS: se monta ~/.aws (aws configure / AWS Academy) y además se pasan
+# las variables AWS_* de la terminal si están definidas.
+
+x-aws: &aws
+  env_file: .env
+  environment:
+    - AWS_ACCESS_KEY_ID
+    - AWS_SECRET_ACCESS_KEY
+    - AWS_SESSION_TOKEN
+    - AWS_PROFILE
+  volumes:
+    - ~/.aws:/root/.aws:ro
+
+services:
+  ticket-api:
+    <<: *aws
+    build: ./ticket-api
+    image: ticket-api:local
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+  ticket-checkout:
+    build: ./ticket-checkout
+    image: ticket-checkout:local
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  ticket-worker:
+    <<: *aws
+    build: ./ticket-worker
+    image: ticket-worker:local
+    environment:
+      - AWS_ACCESS_KEY_ID
+      - AWS_SECRET_ACCESS_KEY
+      - AWS_SESSION_TOKEN
+      - AWS_PROFILE
+      - CHECKOUT_URL=http://ticket-checkout:8000/checkout
+    depends_on:
+      - ticket-checkout
+    restart: unless-stopped
