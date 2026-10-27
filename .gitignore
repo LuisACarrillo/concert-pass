@@ -12,3 +12,7 @@ __pycache__/
 
 # Variables de entorno locales (nunca commitear)
 .env
+
+# Temporales de los scripts de infraestructura
+.env.bak
+*.tmp.json
