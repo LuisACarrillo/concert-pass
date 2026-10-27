@@ -32,6 +32,25 @@ BEGIN
 END $$;
 SQL
     cat scripts/sql/schema.sql
+    # Una versión anterior de este script creaba VARCHAR(n) y TIMESTAMPTZ; se normaliza a 1.6
+    cat <<'SQL'
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_schema = 'public' AND table_name = 'reservations'
+                 AND ((data_type = 'character varying' AND character_maximum_length IS NOT NULL)
+                      OR data_type = 'timestamp with time zone')) THEN
+        RAISE NOTICE 'Tipos de columnas distintos a la seccion 1.6 del enunciado: se corrigen';
+        ALTER TABLE reservations
+            ALTER COLUMN concert_id  TYPE VARCHAR,
+            ALTER COLUMN user_id     TYPE VARCHAR,
+            ALTER COLUMN ticket_type TYPE VARCHAR,
+            ALTER COLUMN status      TYPE VARCHAR,
+            ALTER COLUMN created_at  TYPE TIMESTAMP,
+            ALTER COLUMN updated_at  TYPE TIMESTAMP;
+    END IF;
+END $$;
+SQL
 } | psql_rds -q
 
 log "Estructura actual de reservations:"
