@@ -1,10 +1,14 @@
 #!/bin/bash
 # scripts/init.sh
+# Crea la infraestructura AWS del proyecto (por ahora: RDS PostgreSQL).
+# Uso: set -a; source .env; set +a; ./scripts/init.sh
+set -euo pipefail
+
+: "${DB_PASSWORD:?Falta DB_PASSWORD. Defínela en .env (ver .env.example) o expórtala antes de correr el script.}"
 
 DB_INSTANCE_IDENTIFIER=${DB_INSTANCE_IDENTIFIER:-"ticket-rds-db"}
 DB_NAME=${DB_NAME:-"ticketdb"}
 DB_USER=${DB_USER:-"postgres"}
-DB_PASSWORD=${DB_PASSWORD:-"TuPasswordSeguro123!"}
 AWS_REGION=${AWS_REGION:-"us-east-1"}
 
 echo "Creando instancia PostgreSQL en RDS..."
@@ -49,4 +53,5 @@ aws ec2 authorize-security-group-ingress \
 
 echo "----------------------------------------"
 echo "DB_HOST=$DB_HOST"
+echo "Copia este valor a DB_HOST en tu .env"
 echo "----------------------------------------"

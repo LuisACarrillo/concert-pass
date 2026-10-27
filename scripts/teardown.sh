@@ -1,5 +1,8 @@
 #!/bin/bash
-# scripts/teardown_rds.sh
+# scripts/teardown.sh
+# Elimina la infraestructura AWS creada por scripts/init.sh.
+# Uso: set -a; source .env; set +a; ./scripts/teardown.sh
+set -euo pipefail
 
 DB_INSTANCE_IDENTIFIER=${DB_INSTANCE_IDENTIFIER:-"ticket-rds-db"}
 AWS_REGION=${AWS_REGION:-"us-east-1"}

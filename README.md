@@ -1,13 +1,41 @@
 # concert-pass
 
-# ticket-api
+```
+ticket-api/        API de reservas (FastAPI, puerto 8080)
+ticket-worker/     Worker que procesa la cola
+ticket-checkout/   Servicio de checkout (FastAPI, puerto 8000)
+k8s/               Manifiestos de Kubernetes (parte 3)
+scripts/           Creación y borrado de infraestructura en AWS
+```
+
+Cada servicio tiene su propio `src/`, `requirements.txt` y `Dockerfile`; el build context es la carpeta del servicio.
+
+## Configuración
+
+```bash
+cp .env.example .env   # y llena los valores (DB_PASSWORD es obligatorio)
+```
+
+`.env` está en `.gitignore`: nunca subas contraseñas ni hosts al repo.
+
+## Infraestructura
+
+```bash
+set -a; source .env; set +a
+./scripts/init.sh       # crea la RDS e imprime DB_HOST (cópialo a .env)
+./scripts/teardown.sh   # borra todo
+```
+
+## ticket-api
+
+```bash
 docker build -t ticket-api ticket-api/
+docker run -d -p 8080:8080 --env-file .env --name ticket-api-container ticket-api
+```
 
-### 2. Ejecutar el contenedor pasando las variables de entorno de tu RDS
-docker run -d -p 8080:8080 -e DB_HOST=TUNO_HOST_RDS -e DB_PORT=5432 -e DB_NAME=ticketdb -e DB_USER=postgres -e DB_PASSWORD='TuPasswordSeguro123!' --name ticket-api-container ticket-api
-docker run -d -p 8080:8080 -e DB_HOST=ticket-rds-db.czdstlqamloj.us-east-1.rds.amazonaws.com -e DB_PORT=5432 -e DB_NAME=ticketdb -e DB_USER=postgres -e DB_PASSWORD='TuPasswordSeguro123!' --name ticket-api-container ticket-api
+Probar:
 
-### 3. Probar con tu curl
+```bash
 curl -X POST "http://localhost:8080/reserve" \
   -H "Content-Type: application/json" \
   -d '{
@@ -16,3 +44,4 @@ curl -X POST "http://localhost:8080/reserve" \
     "ticket_type": "vip",
     "quantity": 2
   }'
+```
