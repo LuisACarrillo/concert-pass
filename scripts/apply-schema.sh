@@ -5,16 +5,10 @@
 source "$(dirname "$0")/lib/common.sh"
 require_db_password
 require_docker
-
 if [ -z "${DB_HOST:-}" ]; then
     check_aws
     DB_HOST=$(rds_host)
 fi
-
-psql_rds() {
-    docker run -i --rm -e PGPASSWORD="$DB_PASSWORD" postgres:16 \
-        psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 "$@"
-}
 
 log "Aplicando schema en $DB_HOST/$DB_NAME..."
 {

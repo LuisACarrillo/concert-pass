@@ -61,3 +61,16 @@ rds_host() {
 sqs_queue_url() {
     awsq sqs get-queue-url --queue-name "$SQS_QUEUE_NAME" --query QueueUrl --output text
 }
+
+# psql contra la RDS usando la imagen postgres:16 (no requiere psql local).
+# Requiere DB_PASSWORD; si no hay DB_HOST lo obtiene de AWS.
+psql_rds() {
+    require_db_password
+    require_docker
+    if [ -z "${DB_HOST:-}" ]; then
+        check_aws
+        DB_HOST=$(rds_host)
+    fi
+    docker run -i --rm -e PGPASSWORD="$DB_PASSWORD" postgres:16 \
+        psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 "$@"
+}
