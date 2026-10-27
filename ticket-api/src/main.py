@@ -42,9 +42,13 @@ pool_slots = threading.BoundedSemaphore(DB_POOL_MAX)
 @asynccontextmanager
 async def lifespan(app):
     global pool
+    # minconn = maxconn: psycopg2 CIERRA al devolverla toda conexión que exceda minconn, así que
+    # con minconn=1 casi cada petición abría una conexión nueva a RDS (TCP + SSL + auth, ~1 s).
+    # Keepalives para que el NAT no corte las conexiones del pool mientras están inactivas.
     pool = ThreadedConnectionPool(
-        1, DB_POOL_MAX,
+        DB_POOL_MAX, DB_POOL_MAX,
         host=DB_HOST, port=DB_PORT, dbname=DB_NAME, user=DB_USER, password=DB_PASSWORD,
+        keepalives=1, keepalives_idle=30, keepalives_interval=10, keepalives_count=3,
     )
     log.info("Conectado a RDS %s/%s", DB_HOST, DB_NAME)
     yield

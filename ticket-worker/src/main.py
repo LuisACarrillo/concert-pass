@@ -107,7 +107,11 @@ def start_health_server():
 
 
 def connect():
-    conn = psycopg2.connect(host=DB_HOST, port=DB_PORT, dbname=DB_NAME, user=DB_USER, password=DB_PASSWORD)
+    # Keepalives para que el NAT no corte la conexión mientras la cola está vacía
+    conn = psycopg2.connect(
+        host=DB_HOST, port=DB_PORT, dbname=DB_NAME, user=DB_USER, password=DB_PASSWORD,
+        keepalives=1, keepalives_idle=30, keepalives_interval=10, keepalives_count=3,
+    )
     log.info("Conectado a RDS %s/%s", DB_HOST, DB_NAME)
     return conn
 
