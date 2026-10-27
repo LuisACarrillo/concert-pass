@@ -1,0 +1,24 @@
+[
+  {
+    "concert_id": "bad-bunny-gdl",
+    "name": "Bad Bunny - Most Wanted Tour",
+    "date": "2026-12-12",
+    "recinto": "Estadio Akron, Guadalajara",
+    "capacity": {
+      "floor": 5,
+      "vip": 10,
+      "general": 20
+    }
+  },
+  {
+    "concert_id": "cuarteto-cuerdas-cdmx",
+    "name": "Cuarteto de Cuerdas Nocturno",
+    "date": "2027-02-20",
+    "recinto": "Foro Lindbergh, CDMX",
+    "capacity": {
+      "floor": 300,
+      "vip": 100,
+      "general": 600
+    }
+  }
+]
