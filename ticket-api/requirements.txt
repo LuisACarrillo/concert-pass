@@ -1,4 +1,5 @@
-fastapi
-uvicorn
-psycopg2-binary
-pydantic
+fastapi==0.115.6
+uvicorn==0.34.0
+pydantic==2.10.4
+psycopg2-binary==2.9.10
+boto3==1.35.90
