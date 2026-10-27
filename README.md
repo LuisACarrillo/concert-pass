@@ -10,21 +10,25 @@ scripts/           Creación y borrado de infraestructura en AWS
 
 Cada servicio tiene su propio `src/`, `requirements.txt` y `Dockerfile`; el build context es la carpeta del servicio.
 
-## Configuración
+## Infraestructura (scripts/)
+
+Requisitos: AWS CLI v2 con credenciales válidas, Docker corriendo y bash (Git Bash en Windows).
+Región por default `us-east-1` (`AWS_REGION` la cambia). Todos los scripts son idempotentes.
 
 ```bash
-cp .env.example .env   # y llena los valores (DB_PASSWORD es obligatorio)
+DB_PASSWORD='elige-un-password' ./scripts/setup.sh   # crea todo y genera .env
+./scripts/teardown.sh                                # borra todo y verifica
 ```
 
-`.env` está en `.gitignore`: nunca subas contraseñas ni hosts al repo.
+| Script | Recurso |
+|---|---|
+| `setup-rds.sh` | RDS PostgreSQL `ticket-rds-db` (db.t3.micro, pública, puerto 5432) |
+| `apply-schema.sh` | Aplica `sql/schema.sql` con `psql` de la imagen `postgres:16` |
+| `setup-dynamodb.sh` | Tabla `concertpass-events` + seed de `data/concerts.json` |
+| `setup-sqs.sh` | Cola FIFO `concertpass-reservations.fifo` (dedup por `MessageDeduplicationId`) |
+| `setup-secrets.sh` | Secret `concertpass/rds` con `{username, password, host, port, dbname}` |
 
-## Infraestructura
-
-```bash
-set -a; source .env; set +a
-./scripts/init.sh       # crea la RDS e imprime DB_HOST (cópialo a .env)
-./scripts/teardown.sh   # borra todo
-```
+`.env` está en `.gitignore`: nunca subas contraseñas ni hosts al repo. `.env.example` documenta las variables.
 
 ## ticket-api
 
