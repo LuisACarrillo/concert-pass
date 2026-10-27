@@ -1,0 +1,14 @@
+# Entornos virtuales y dependencias locales
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.pyc
+
+# Variables de entorno locales (nunca commitear)
+.env
