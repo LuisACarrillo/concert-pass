@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ticket-api
+  labels:
+    app: ticket-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ticket-api
+  template:
+    metadata:
+      labels:
+        app: ticket-api
+    spec:
+      containers:
+        - name: ticket-api
+          image: __ECR_REGISTRY__/ticket-api:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: concertpass-config
+            - secretRef:
+                name: concertpass-rds
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ticket-api
+spec:
+  type: NodePort
+  selector:
+    app: ticket-api
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      nodePort: __NODE_PORT__
