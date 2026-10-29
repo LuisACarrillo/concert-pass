@@ -26,7 +26,7 @@ Estados: `pending` → `booked` → `confirmed`, o `pending` → `rejected` si n
 ticket-api/        API de reservas (FastAPI, puerto 8080)
 ticket-worker/     Worker de SQS (health check en 8081)
 ticket-checkout/   Simulador de pagos (FastAPI, puerto 8000)
-k8s/               Manifiestos de Kubernetes (parte 3)
+k8s/               Manifiestos de Kubernetes y la config del cluster EKS
 scripts/           Infraestructura, pruebas e inspección
 docs/              Enunciado de la práctica
 ```
@@ -164,16 +164,44 @@ ticket-worker usa la transacción de la sección 1.6 con tres ajustes que Postgr
 - **`FOR UPDATE` sigue siendo necesario.** La serialización del grupo no evita que dos workers lean la misma disponibilidad: un mensaje reentregado por visibility timeout, o reservaciones de la misma sección en otro grupo, pueden competir. En pruebas concurrentes contra PostgreSQL local, bloquear solo las filas `booked`/`confirmed` produjo 12 boletos vendidos de 10. Con el bloqueo de toda la sección nunca hubo sobreventa.
 - **El cuello de botella es la lógica de inventario, no la recepción.** ticket-api aceptó las 40 en 2 s, mientras que el worker procesa unos 0.8 mensajes por segundo. Cada mensaje hace 6 o 7 viajes de ida y vuelta a RDS (leer, bloquear, actualizar, confirmar), y desde WSL a `us-east-1` cada viaje cuesta unos 150-200 ms. En EKS, dentro de la misma región, la latencia a RDS es mucho menor y el throughput por grupo debería subir.
 
-## Pendiente para la parte 3
+## 5. Correr en EKS
 
-- [ ] **EKS**: cluster con `eksctl` y 2 nodos de trabajo. Verificar con `kubectl get nodes`. Los nodos necesitan permisos sobre SQS (send/receive/delete), DynamoDB (`GetItem`) y, si se lee el secret desde el cluster, Secrets Manager. En AWS Academy se usa `LabRole`.
-- [ ] **ECR**: un repositorio por servicio, con push de `ticket-api`, `ticket-worker` y `ticket-checkout`. Cada imagen se construye desde la carpeta de su servicio: `docker build -t <repo> ticket-api/`.
-- [ ] **Manifiestos en `k8s/`**:
-  - `ticket-api`: Deployment + Service **NodePort** (contenedor en 8080).
-  - `ticket-worker`: Deployment con **1 réplica**.
-  - `ticket-checkout`: Deployment + Service ClusterIP llamado `ticket-checkout` (8000), para que el worker use `CHECKOUT_URL=http://ticket-checkout:8000`.
-  - ConfigMap con `AWS_REGION`, `SQS_QUEUE_URL`, `DYNAMODB_TABLE` y `CHECKOUT_URL`.
-- [ ] **Credenciales de RDS como variables de entorno**: crear un Secret de Kubernetes a partir de `concertpass/rds` (`aws secretsmanager get-secret-value` → `kubectl create secret generic`) e inyectarlo con `env.valueFrom.secretKeyRef` como `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER` y `DB_PASSWORD`.
-- [ ] **Health checks** (liveness/readiness, `GET /health`): ticket-api en 8080, ticket-checkout en 8000, ticket-worker en 8081.
-- [ ] **Escalar el worker a 3 réplicas** (`kubectl scale deployment ticket-worker --replicas=3`) y correr `test-alta-demanda.sh` contra el NodePort para mostrar que no hay sobreventa.
-- [ ] **teardown.sh**: agregar el borrado de EKS y ECR y sus verificaciones en los lugares marcados con `PARTE 3`.
+Requisitos extra, en WSL: `eksctl` y `kubectl`. El cluster se llama `concertpass`, usa el rol `LabRole` de AWS Academy y 2 nodos `t3.medium` en subred pública para que el NodePort sea alcanzable. No está enganchado a `setup.sh` porque se cobra mientras exista.
+
+```bash
+./scripts/setup-eks.sh     # al final, kubectl get nodes muestra 2 nodos Ready
+./scripts/setup-ecr.sh     # build y push de ticket-api, ticket-worker y ticket-checkout
+./scripts/deploy-k8s.sh    # Secret desde concertpass/rds, apply de k8s/ e imprime la URL
+```
+
+`deploy-k8s.sh` crea el Secret `concertpass-rds` (`DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`) y aplica:
+
+| Manifiesto | Recurso |
+|---|---|
+| `k8s/ticket-api.yaml` | Deployment + Service NodePort `30080` (contenedor 8080, probes `GET /health`) |
+| `k8s/ticket-worker.yaml` | Deployment con 1 réplica (health en 8081, sin Service) |
+| `k8s/ticket-checkout.yaml` | Deployment + Service ClusterIP `ticket-checkout:8000` |
+| `k8s/configmap.yaml` | `AWS_REGION`, `SQS_QUEUE_URL`, `DYNAMODB_TABLE`, `CHECKOUT_URL` |
+
+Los pods de la API y el worker leen AWS por el rol del nodo (IMDS con hop limit 2). La contraseña de RDS no se versiona: sale de Secrets Manager al desplegar.
+
+```bash
+BASE_URL=http://<ip-nodo>:30080 ./scripts/test-nicho.sh
+./scripts/reset-db.sh -y
+kubectl scale deployment ticket-worker --replicas=3
+BASE_URL=http://<ip-nodo>:30080 ./scripts/test-alta-demanda.sh
+```
+
+Volver a correr `deploy-k8s.sh` deja el worker en 1 réplica, que es lo que declara el manifiesto.
+
+Para el video, con el worker detenido el mensaje se queda en la cola:
+
+```bash
+kubectl scale deployment ticket-worker --replicas=0
+curl -X POST "$BASE_URL/reserve" -H "Content-Type: application/json" \
+  -d '{"concert_id": "cuarteto-cuerdas-cdmx", "user_id": "usr_video", "ticket_type": "vip", "quantity": 1}'
+./scripts/peek-sqs.sh
+kubectl scale deployment ticket-worker --replicas=1
+```
+
+`./scripts/teardown.sh` borra primero el cluster y los tres repositorios ECR, y después el resto. Verifica que ya no existan.

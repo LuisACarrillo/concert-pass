@@ -1,17 +1,30 @@
 #!/bin/bash
 # scripts/teardown.sh
-# Borra TODA la infraestructura creada por setup.sh y verifica que ya no exista.
+# Borra el cluster EKS, los repositorios ECR y la infraestructura de setup.sh.
 # No truena si algún recurso ya no está. Sale con código 1 si algo sigue existiendo.
 source "$(dirname "$0")/lib/common.sh"
 check_aws
 
-# ---------------------------------------------------------------------------
-# PARTE 3: agregar aquí, ANTES de borrar los recursos de abajo, el borrado de
-#   - EKS: node groups y cluster (eksctl delete cluster --wait, o
-#     aws eks delete-nodegroup + aws eks delete-cluster con sus waits)
-#   - ECR: aws ecr delete-repository --force por cada servicio
-# y sus líneas correspondientes en la sección de verificación al final.
-# ---------------------------------------------------------------------------
+# EKS y ECR van primero: los nodos dejan de existir antes de borrar la RDS y las imágenes.
+log "EKS: '$EKS_CLUSTER_NAME'"
+if aws eks describe-cluster --name "$EKS_CLUSTER_NAME" >/dev/null 2>&1; then
+    require_cmd eksctl "Instala eksctl: https://eksctl.io"
+    log "Borrando el cluster (tarda varios minutos)..."
+    eksctl delete cluster --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION" --wait
+    echo "    borrado"
+else
+    echo "    no existe, se omite"
+fi
+
+for repo in ticket-api ticket-worker ticket-checkout; do
+    log "ECR: '$repo'"
+    if aws ecr describe-repositories --repository-names "$repo" >/dev/null 2>&1; then
+        aws ecr delete-repository --repository-name "$repo" --force >/dev/null
+        echo "    borrado solicitado"
+    else
+        echo "    no existe, se omite"
+    fi
+done
 
 log "Secrets Manager: '$DB_SECRET_NAME'"
 if aws secretsmanager describe-secret --secret-id "$DB_SECRET_NAME" >/dev/null 2>&1; then
@@ -63,7 +76,7 @@ fi
 # --- Verificación -----------------------------------------------------------
 # SQS y Secrets Manager pueden seguir respondiendo unos segundos después del
 # borrado, así que se reintenta hasta 90 s antes de declarar que algo quedó.
-NOT_FOUND='ResourceNotFoundException|NonExistentQueue|QueueDoesNotExist|DBInstanceNotFound'
+NOT_FOUND='ResourceNotFoundException|NonExistentQueue|QueueDoesNotExist|DBInstanceNotFound|ClusterNotFoundException|RepositoryNotFoundException'
 # 0 = confirmado que no existe; 1 = sigue existiendo; 2 = error inesperado (p. ej. ExpiredToken)
 gone() {
     local i out
@@ -95,7 +108,10 @@ check "Secrets Manager  $DB_SECRET_NAME" aws secretsmanager describe-secret --se
 check "SQS              $SQS_QUEUE_NAME" aws sqs get-queue-url --queue-name "$SQS_QUEUE_NAME"
 check "DynamoDB         $DYNAMODB_TABLE" aws dynamodb describe-table --table-name "$DYNAMODB_TABLE"
 check "RDS              $DB_INSTANCE_IDENTIFIER" aws rds describe-db-instances --db-instance-identifier "$DB_INSTANCE_IDENTIFIER"
-# PARTE 3: agregar aquí los check de EKS y ECR.
+check "EKS              $EKS_CLUSTER_NAME" aws eks describe-cluster --name "$EKS_CLUSTER_NAME"
+for repo in ticket-api ticket-worker ticket-checkout; do
+    check "ECR              $repo" aws ecr describe-repositories --repository-names "$repo"
+done
 echo "======================================================================="
 
 exit "$failed"
