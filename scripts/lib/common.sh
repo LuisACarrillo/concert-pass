@@ -23,6 +23,8 @@ DB_PORT="${DB_PORT:-5432}"
 DYNAMODB_TABLE="${DYNAMODB_TABLE:-concertpass-events}"
 SQS_QUEUE_NAME="${SQS_QUEUE_NAME:-concertpass-reservations.fifo}"
 DB_SECRET_NAME="${DB_SECRET_NAME:-concertpass/rds}"
+EKS_CLUSTER_NAME="${EKS_CLUSTER_NAME:-concertpass}"
+EKS_NODE_PORT="${EKS_NODE_PORT:-30080}"
 
 log() { echo "==> $*"; }
 die() { echo "ERROR: $*" >&2; exit 1; }
@@ -66,7 +68,7 @@ sqs_queue_url() {
 # Requiere DB_PASSWORD; si no hay DB_HOST lo obtiene de AWS.
 psql_rds() {
     require_db_password
-    require_docker
+    require_docke
     if [ -z "${DB_HOST:-}" ]; then
         check_aws
         DB_HOST=$(rds_host)
