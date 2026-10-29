@@ -5,6 +5,13 @@ metadata:
   name: concertpass
   region: __AWS_REGION__
 
+iam:
+  withOIDC: false
+  serviceRoleARN: arn:aws:iam::__ACCOUNT_ID__:role/LabRole
+
+autoModeConfig:
+  enabled: false
+
 managedNodeGroups:
   - name: workers
     instanceType: t3.medium

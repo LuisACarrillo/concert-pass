@@ -68,7 +68,7 @@ sqs_queue_url() {
 # Requiere DB_PASSWORD; si no hay DB_HOST lo obtiene de AWS.
 psql_rds() {
     require_db_password
-    require_docke
+    require_docker
     if [ -z "${DB_HOST:-}" ]; then
         check_aws
         DB_HOST=$(rds_host)

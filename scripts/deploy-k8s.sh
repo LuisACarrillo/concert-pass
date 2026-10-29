@@ -1,5 +1,6 @@
 #!/bin/bash
 # scripts/deploy-k8s.sh
+source "$(dirname "$0")/lib/common.sh"
 check_aws
 require_cmd kubectl "Instala kubectl: https://kubernetes.io/docs/tasks/tools/"
 require_cmd python3 "Hace falta python3 para leer el JSON del secret."
