@@ -125,22 +125,6 @@ Inspección:
 | `peek-sqs.sh` | Mensajes en la cola sin consumirlos (`MessageGroupId`, `MessageDeduplicationId`, body) |
 | `reset-db.sh [-y]` | Vacía `reservations` entre corridas |
 
-### Tip para el video: mostrar que el mensaje llega a SQS
-
-Con el worker detenido, el mensaje se queda en la cola y se puede mostrar:
-
-```bash
-docker compose stop ticket-worker
-curl -X POST http://localhost:8080/reserve -H "Content-Type: application/json" \
-  -d '{"concert_id": "cuarteto-cuerdas-cdmx", "user_id": "usr_video", "ticket_type": "vip", "quantity": 1}'
-./scripts/peek-sqs.sh                          # se ve el mensaje con MessageGroupId=cuarteto-cuerdas-cdmx
-curl http://localhost:8080/reservation/<id>    # sigue en pending
-docker compose start ticket-worker
-curl http://localhost:8080/reservation/<id>    # confirmed
-```
-
-En EKS se hace lo mismo con `kubectl scale deployment ticket-worker --replicas=0`, y después `--replicas=1`.
-
 ### Disponibilidad sin sobreventa
 
 ticket-worker usa la transacción de la sección 1.6 con tres ajustes que PostgreSQL necesita:
@@ -193,15 +177,5 @@ BASE_URL=http://<ip-nodo>:30080 ./scripts/test-alta-demanda.sh
 ```
 
 Volver a correr `deploy-k8s.sh` deja el worker en 1 réplica, que es lo que declara el manifiesto.
-
-Para el video, con el worker detenido el mensaje se queda en la cola:
-
-```bash
-kubectl scale deployment ticket-worker --replicas=0
-curl -X POST "$BASE_URL/reserve" -H "Content-Type: application/json" \
-  -d '{"concert_id": "cuarteto-cuerdas-cdmx", "user_id": "usr_video", "ticket_type": "vip", "quantity": 1}'
-./scripts/peek-sqs.sh
-kubectl scale deployment ticket-worker --replicas=1
-```
 
 `./scripts/teardown.sh` borra primero el cluster y los tres repositorios ECR, y después el resto. Verifica que ya no existan.
